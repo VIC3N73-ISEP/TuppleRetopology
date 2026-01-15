@@ -1,0 +1,28 @@
+# Lista de pares para treinamento de IA de retopologia
+# Formato: pair_id|highpoly_path|lowpoly_path
+
+0001|Expai-Retopo\highpoly-0001.obj|Expai-Retopo\lowpoly-0001.obj
+0002|Expai-Retopo\highpoly-0002.obj|Expai-Retopo\lowpoly-0002.obj
+0003|Expai-Retopo\highpoly-0003.obj|Expai-Retopo\lowpoly-0003.obj
+0004|Expai-Retopo\highpoly-0004.obj|Expai-Retopo\lowpoly-0004.obj
+0005|Expai-Retopo\highpoly-0005.obj|Expai-Retopo\lowpoly-0005.obj
+0006|Expai-Retopo\highpoly-0006.obj|Expai-Retopo\lowpoly-0006.obj
+0007|Expai-Retopo\highpoly-0007.obj|Expai-Retopo\lowpoly-0007.obj
+0008|Expai-Retopo\highpoly-0008.obj|Expai-Retopo\lowpoly-0008.obj
+0009|Expai-Retopo\highpoly-0009.obj|Expai-Retopo\lowpoly-0009.obj
+0010|Expai-Retopo\highpoly-0010.obj|Expai-Retopo\lowpoly-0010.obj
+0011|Expai-Retopo\highpoly-0011.obj|Expai-Retopo\lowpoly-0011.obj
+0012|Expai-Retopo\highpoly-0012.obj|Expai-Retopo\lowpoly-0012.obj
+0013|Expai-Retopo\highpoly-0013.obj|Expai-Retopo\lowpoly-0013.obj
+0014|Expai-Retopo\highpoly-0014.obj|Expai-Retopo\lowpoly-0014.obj
+0015|Expai-Retopo\highpoly-0015.obj|Expai-Retopo\lowpoly-0015.obj
+0016|Expai-Retopo\highpoly-0016.obj|Expai-Retopo\lowpoly-0016.obj
+0017|Expai-Retopo\highpoly-0017.obj|Expai-Retopo\lowpoly-0017.obj
+0018|Expai-Retopo\highpoly-0018.obj|Expai-Retopo\lowpoly-0018.obj
+0019|Expai-Retopo\highpoly-0019.obj|Expai-Retopo\lowpoly-0019.obj
+0020|Expai-Retopo\highpoly-0020.obj|Expai-Retopo\lowpoly-0020.obj
+0021|Expai-Retopo\highpoly-0021.obj|Expai-Retopo\lowpoly-0021.obj
+0022|Expai-Retopo\highpoly-0022.obj|Expai-Retopo\lowpoly-0022.obj
+0023|Expai-Retopo\highpoly-0023.obj|Expai-Retopo\lowpoly-0023.obj
+0024|Expai-Retopo\highpoly-0024.obj|Expai-Retopo\lowpoly-0024.obj
+0025|Expai-Retopo\highpoly-0025.obj|Expai-Retopo\lowpoly-0025.obj

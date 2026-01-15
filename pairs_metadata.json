@@ -1,0 +1,180 @@
+{
+  "total_pairs": 25,
+  "pairs": [
+    {
+      "pair_id": "0001",
+      "highpoly": "Expai-Retopo\\highpoly-0001.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0001.obj",
+      "highpoly_name": "highpoly-0001.obj",
+      "lowpoly_name": "lowpoly-0001.obj"
+    },
+    {
+      "pair_id": "0002",
+      "highpoly": "Expai-Retopo\\highpoly-0002.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0002.obj",
+      "highpoly_name": "highpoly-0002.obj",
+      "lowpoly_name": "lowpoly-0002.obj"
+    },
+    {
+      "pair_id": "0003",
+      "highpoly": "Expai-Retopo\\highpoly-0003.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0003.obj",
+      "highpoly_name": "highpoly-0003.obj",
+      "lowpoly_name": "lowpoly-0003.obj"
+    },
+    {
+      "pair_id": "0004",
+      "highpoly": "Expai-Retopo\\highpoly-0004.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0004.obj",
+      "highpoly_name": "highpoly-0004.obj",
+      "lowpoly_name": "lowpoly-0004.obj"
+    },
+    {
+      "pair_id": "0005",
+      "highpoly": "Expai-Retopo\\highpoly-0005.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0005.obj",
+      "highpoly_name": "highpoly-0005.obj",
+      "lowpoly_name": "lowpoly-0005.obj"
+    },
+    {
+      "pair_id": "0006",
+      "highpoly": "Expai-Retopo\\highpoly-0006.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0006.obj",
+      "highpoly_name": "highpoly-0006.obj",
+      "lowpoly_name": "lowpoly-0006.obj"
+    },
+    {
+      "pair_id": "0007",
+      "highpoly": "Expai-Retopo\\highpoly-0007.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0007.obj",
+      "highpoly_name": "highpoly-0007.obj",
+      "lowpoly_name": "lowpoly-0007.obj"
+    },
+    {
+      "pair_id": "0008",
+      "highpoly": "Expai-Retopo\\highpoly-0008.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0008.obj",
+      "highpoly_name": "highpoly-0008.obj",
+      "lowpoly_name": "lowpoly-0008.obj"
+    },
+    {
+      "pair_id": "0009",
+      "highpoly": "Expai-Retopo\\highpoly-0009.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0009.obj",
+      "highpoly_name": "highpoly-0009.obj",
+      "lowpoly_name": "lowpoly-0009.obj"
+    },
+    {
+      "pair_id": "0010",
+      "highpoly": "Expai-Retopo\\highpoly-0010.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0010.obj",
+      "highpoly_name": "highpoly-0010.obj",
+      "lowpoly_name": "lowpoly-0010.obj"
+    },
+    {
+      "pair_id": "0011",
+      "highpoly": "Expai-Retopo\\highpoly-0011.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0011.obj",
+      "highpoly_name": "highpoly-0011.obj",
+      "lowpoly_name": "lowpoly-0011.obj"
+    },
+    {
+      "pair_id": "0012",
+      "highpoly": "Expai-Retopo\\highpoly-0012.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0012.obj",
+      "highpoly_name": "highpoly-0012.obj",
+      "lowpoly_name": "lowpoly-0012.obj"
+    },
+    {
+      "pair_id": "0013",
+      "highpoly": "Expai-Retopo\\highpoly-0013.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0013.obj",
+      "highpoly_name": "highpoly-0013.obj",
+      "lowpoly_name": "lowpoly-0013.obj"
+    },
+    {
+      "pair_id": "0014",
+      "highpoly": "Expai-Retopo\\highpoly-0014.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0014.obj",
+      "highpoly_name": "highpoly-0014.obj",
+      "lowpoly_name": "lowpoly-0014.obj"
+    },
+    {
+      "pair_id": "0015",
+      "highpoly": "Expai-Retopo\\highpoly-0015.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0015.obj",
+      "highpoly_name": "highpoly-0015.obj",
+      "lowpoly_name": "lowpoly-0015.obj"
+    },
+    {
+      "pair_id": "0016",
+      "highpoly": "Expai-Retopo\\highpoly-0016.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0016.obj",
+      "highpoly_name": "highpoly-0016.obj",
+      "lowpoly_name": "lowpoly-0016.obj"
+    },
+    {
+      "pair_id": "0017",
+      "highpoly": "Expai-Retopo\\highpoly-0017.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0017.obj",
+      "highpoly_name": "highpoly-0017.obj",
+      "lowpoly_name": "lowpoly-0017.obj"
+    },
+    {
+      "pair_id": "0018",
+      "highpoly": "Expai-Retopo\\highpoly-0018.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0018.obj",
+      "highpoly_name": "highpoly-0018.obj",
+      "lowpoly_name": "lowpoly-0018.obj"
+    },
+    {
+      "pair_id": "0019",
+      "highpoly": "Expai-Retopo\\highpoly-0019.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0019.obj",
+      "highpoly_name": "highpoly-0019.obj",
+      "lowpoly_name": "lowpoly-0019.obj"
+    },
+    {
+      "pair_id": "0020",
+      "highpoly": "Expai-Retopo\\highpoly-0020.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0020.obj",
+      "highpoly_name": "highpoly-0020.obj",
+      "lowpoly_name": "lowpoly-0020.obj"
+    },
+    {
+      "pair_id": "0021",
+      "highpoly": "Expai-Retopo\\highpoly-0021.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0021.obj",
+      "highpoly_name": "highpoly-0021.obj",
+      "lowpoly_name": "lowpoly-0021.obj"
+    },
+    {
+      "pair_id": "0022",
+      "highpoly": "Expai-Retopo\\highpoly-0022.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0022.obj",
+      "highpoly_name": "highpoly-0022.obj",
+      "lowpoly_name": "lowpoly-0022.obj"
+    },
+    {
+      "pair_id": "0023",
+      "highpoly": "Expai-Retopo\\highpoly-0023.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0023.obj",
+      "highpoly_name": "highpoly-0023.obj",
+      "lowpoly_name": "lowpoly-0023.obj"
+    },
+    {
+      "pair_id": "0024",
+      "highpoly": "Expai-Retopo\\highpoly-0024.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0024.obj",
+      "highpoly_name": "highpoly-0024.obj",
+      "lowpoly_name": "lowpoly-0024.obj"
+    },
+    {
+      "pair_id": "0025",
+      "highpoly": "Expai-Retopo\\highpoly-0025.obj",
+      "lowpoly": "Expai-Retopo\\lowpoly-0025.obj",
+      "highpoly_name": "highpoly-0025.obj",
+      "lowpoly_name": "lowpoly-0025.obj"
+    }
+  ]
+}
