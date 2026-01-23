@@ -203,14 +203,24 @@ O arquivo `train.py` implementa o loop de treinamento completo com loss customiz
    - Calcula distância euclidiana entre features usando nearest neighbor matching
    - **Propósito**: Preservar características geométricas além da posição
 
+4. **Normal Consistency Loss** (peso: `normal_consistency_weight = 0.3`) ✅ **IMPLEMENTADO**:
+   - Calcula normais dos vértices a partir das posições preditas usando a topologia do grafo (arestas)
+   - Compara essas normais com as normais do target usando Chamfer distance
+   - **Método**: Para cada vértice, calcula normal como média dos cross products entre vetores para vizinhos consecutivos
+   - **Propósito**: Garantir que a superfície gerada tenha orientação correta e normais consistentes
+   - **Vantagem**: Funciona mesmo quando pred e target têm números diferentes de vértices
+
 **Loss Total:**
 ```
-total_loss = pos_weight × (0.8 × chamfer + 0.2 × hausdorff) + normal_weight × feature_loss
+total_loss = pos_weight × (0.8 × chamfer + 0.2 × hausdorff) + 
+             normal_weight × feature_loss + 
+             normal_consistency_weight × normal_consistency_loss
 ```
 
 **Pesos padrão:**
 - `pos_weight = 1.0`
 - `normal_weight = 0.5`
+- `normal_consistency_weight = 0.3` ✅
 - `shape_weight = 0.3` (não usado diretamente, mas hausdorff serve para isso)
 
 #### Otimizador e Scheduler
@@ -244,7 +254,8 @@ Definidas em `TRAINING_CONFIG`:
 
 1. **Para cada época**:
    - Treina em todos os batches do dataset de treino
-   - Calcula loss média de treino
+   - Calcula loss média de treino (incluindo normal consistency)
+   - Exibe breakdown da loss: posição, hausdorff, features, normal consistency
    - A cada `val_every` épocas:
      - Valida no dataset de validação
      - Atualiza learning rate via scheduler
@@ -252,6 +263,15 @@ Definidas em `TRAINING_CONFIG`:
    - A cada `save_every` épocas:
      - Salva checkpoint periódico
    - Salva histórico de treinamento em JSON
+
+**Exemplo de saída durante treinamento:**
+```
+Loss de treino: 0.123456
+  - Posição: 0.080000
+  - Hausdorff: 0.020000
+  - Features: 0.015000
+  - Normal Consistency: 0.008456
+```
 
 #### Salvamento de Checkpoints
 
@@ -340,10 +360,18 @@ O arquivo `inference.py` implementa o pipeline completo de inferência, desde o 
 
 ## 📈 Métricas de Loss (Resumo)
 
-A loss combina:
-- **Posição**: Chamfer distance (80%) + Hausdorff distance (20%) entre vértices preditos e alvo
-- **Features**: Chamfer distance para normais e outras características
-- **Preservação de forma**: Hausdorff distance garante que a forma geral seja preservada
+A loss combina 4 componentes principais:
+1. **Posição**: Chamfer distance (80%) + Hausdorff distance (20%) entre vértices preditos e alvo
+2. **Features**: Chamfer distance para normais e outras características (peso: 0.5)
+3. **Normal Consistency**: ✅ Consistência de normais calculadas da topologia (peso: 0.3)
+4. **Preservação de forma**: Hausdorff distance garante que a forma geral seja preservada
+
+**Fórmula completa:**
+```
+Loss = 1.0 × (0.8 × Chamfer + 0.2 × Hausdorff) + 
+       0.5 × Feature_Loss + 
+       0.3 × Normal_Consistency_Loss
+```
 
 ## 🔧 Troubleshooting
 
@@ -367,6 +395,8 @@ A loss combina:
 - A qualidade do resultado depende da qualidade dos dados de treino
 - Para melhores resultados, use mais pares de treino (aumente X)
 - O modelo pode precisar de ajustes finos para diferentes tipos de meshes
+- **Normal Consistency Loss**: Ajuda a garantir que a superfície gerada tenha orientação correta, especialmente importante para meshes com topologia complexa
+- A normal consistency é calculada dinamicamente a partir da topologia do grafo, não depende de normais pré-calculadas
 
 ## 📋 Tabela de Referência Rápida
 

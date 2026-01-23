@@ -23,17 +23,17 @@ VAL_PAIRS = 5     # Y - número de pares para validação/avaliação
 # Configurações do modelo GNN
 MODEL_CONFIG = {
     "node_features": 9,      # Features por vértice (posição, normal, etc.)
-    "hidden_dim": 128,       # Dimensão oculta
-    "num_layers": 6,         # Número de camadas GNN
+    "hidden_dim": 64,        # Dimensão oculta (reduzido de 128 para acelerar)
+    "num_layers": 4,         # Número de camadas GNN (reduzido de 6 para acelerar)
     "dropout": 0.1,          # Dropout rate
     "use_batch_norm": True,  # Usar batch normalization
 }
 
 # Configurações de treinamento
 TRAINING_CONFIG = {
-    "batch_size": 4,         # Tamanho do batch
-    "learning_rate": 0.001,  # Taxa de aprendizado
-    "num_epochs": 100,       # Número de épocas
+    "batch_size": 8,         # Tamanho do batch (aumentado de 4 para acelerar)
+    "learning_rate": 0.002,  # Taxa de aprendizado (aumentada para convergir mais rápido)
+    "num_epochs": 50,        # Número de épocas (reduzido de 100 para testes rápidos)
     "save_every": 10,        # Salvar checkpoint a cada N épocas
     "val_every": 5,          # Validar a cada N épocas
     "device": "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu",
@@ -41,7 +41,7 @@ TRAINING_CONFIG = {
 
 # Configurações de processamento de mesh
 MESH_CONFIG = {
-    "max_vertices": 50000,   # Máximo de vértices (para limitar memória)
+    "max_vertices": 20000,   # Máximo de vértices (reduzido de 50000 para acelerar processamento)
     "normalize": True,       # Normalizar meshes
     "add_features": True,    # Adicionar features extras (curvatura, etc.)
 }
