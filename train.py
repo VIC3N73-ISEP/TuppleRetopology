@@ -12,12 +12,29 @@ from pathlib import Path
 import json
 from tqdm import tqdm
 import time
+import argparse
 
 from config import (
     TRAIN_PAIRS, VAL_PAIRS, TRAINING_CONFIG, MODEL_CONFIG,
     CHECKPOINTS_DIR, ORGANIZED_PAIRS_DIR
 )
-from model import RetopologyGNN, ImprovedRetopologyGNN
+
+# Importar modelo: tentar novo, fallback para antigo
+try:
+    from model_v2 import StableRetopologyGNN as RetopologyGNN
+    USE_NEW_MODEL = True
+except ImportError:
+    from model import RetopologyGNN
+    USE_NEW_MODEL = False
+
+# Importar loss: tentar novo, fallback para antigo
+try:
+    from loss_v2 import ImprovedRetopologyLoss as RetopologyLoss
+    USE_NEW_LOSS = True
+except ImportError:
+    from train import RetopologyLoss
+    USE_NEW_LOSS = False
+
 from dataset import get_data_loaders
 
 
@@ -94,7 +111,13 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     """
     model.train()
     total_loss = 0.0
-    loss_details = {"pos_loss": 0.0, "feature_loss": 0.0, "total_loss": 0.0}
+    # Inicializar loss_details com todas as chaves possíveis (compatível com loss antiga e nova)
+    loss_details = {
+        "pos_loss": 0.0, "chamfer_loss": 0.0, "hausdorff_loss": 0.0,
+        "normal_consistency_loss": 0.0, "edge_length_loss": 0.0,
+        "degenerate_loss": 0.0, "smoothness_loss": 0.0,
+        "vertex_count_loss": 0.0, "feature_loss": 0.0, "total_loss": 0.0
+    }
     num_batches = 0
     
     pbar = tqdm(train_loader, desc="Treinando")
@@ -104,16 +127,60 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         
         # Forward pass
         optimizer.zero_grad()
-        pred_positions, pred_features = model(highpoly)
+        
+        # Obter target vertex count do lowpoly
+        target_vertex_count = lowpoly.pos.shape[0]
+        
+        # Forward pass (compatível com modelo antigo e novo)
+        if USE_NEW_MODEL:
+            pred_positions, pred_features, importance_scores, selected_indices = model(
+                highpoly, target_vertex_count=target_vertex_count
+            )
+            # Filtrar edge_index para usar apenas vértices selecionados
+            # Criar mapeamento: índice original → novo índice
+            n_original = highpoly.edge_index.max().item() + 1 if highpoly.edge_index.numel() > 0 else 0
+            if n_original > 0:
+                mapping = torch.full((n_original,), -1, dtype=torch.long, device=highpoly.edge_index.device)
+                mapping[selected_indices] = torch.arange(len(selected_indices), device=highpoly.edge_index.device)
+                
+                # Filtrar arestas onde ambos os vértices estão selecionados
+                mask = (mapping[highpoly.edge_index[0]] >= 0) & (mapping[highpoly.edge_index[1]] >= 0)
+                filtered_edges = highpoly.edge_index[:, mask]
+                
+                # Remapear índices
+                if filtered_edges.numel() > 0:
+                    filtered_edges[0] = mapping[filtered_edges[0]]
+                    filtered_edges[1] = mapping[filtered_edges[1]]
+                    pred_edge_index = filtered_edges
+                else:
+                    pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
+            else:
+                pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
+        else:
+            pred_positions, pred_features = model(highpoly)
+            pred_edge_index = highpoly.edge_index
         
         # Calcular loss (usar posições e features do lowpoly alvo)
         target_positions = lowpoly.pos
         target_features = lowpoly.x[:, 3:9] if lowpoly.x.shape[1] >= 9 else None
         
-        loss, loss_dict = criterion(
-            pred_positions, pred_features,
-            target_positions, target_features
-        )
+        # Preparar argumentos da loss (compatível com versão antiga e nova)
+        loss_args = {
+            "pred_positions": pred_positions,
+            "pred_features": pred_features,
+            "target_positions": target_positions,
+            "target_features": target_features
+        }
+        
+        # Adicionar argumentos extras se usar nova loss
+        if USE_NEW_LOSS:
+            loss_args.update({
+                "pred_edge_index": pred_edge_index,
+                "target_edge_index": lowpoly.edge_index,
+                "target_vertex_count": target_vertex_count
+            })
+        
+        loss, loss_dict = criterion(**loss_args)
         
         # Backward pass
         loss.backward()
@@ -127,9 +194,10 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         num_batches += 1
         
         # Atualizar progress bar
+        pos_loss_key = 'chamfer_loss' if 'chamfer_loss' in loss_dict else 'pos_loss'
         pbar.set_postfix({
             "loss": f"{loss.item():.4f}",
-            "pos": f"{loss_dict['pos_loss']:.4f}"
+            "pos": f"{loss_dict.get(pos_loss_key, 0):.4f}"
         })
     
     # Médias
@@ -146,7 +214,13 @@ def validate(model, val_loader, criterion, device):
     """
     model.eval()
     total_loss = 0.0
-    loss_details = {"pos_loss": 0.0, "feature_loss": 0.0, "total_loss": 0.0}
+    # Inicializar loss_details com todas as chaves possíveis (compatível com loss antiga e nova)
+    loss_details = {
+        "pos_loss": 0.0, "chamfer_loss": 0.0, "hausdorff_loss": 0.0,
+        "normal_consistency_loss": 0.0, "edge_length_loss": 0.0,
+        "degenerate_loss": 0.0, "smoothness_loss": 0.0,
+        "vertex_count_loss": 0.0, "feature_loss": 0.0, "total_loss": 0.0
+    }
     num_batches = 0
     
     with torch.no_grad():
@@ -156,16 +230,54 @@ def validate(model, val_loader, criterion, device):
             lowpoly = batch["lowpoly"].to(device)
             
             # Forward pass
-            pred_positions, pred_features = model(highpoly)
+            target_vertex_count = lowpoly.pos.shape[0]
+            
+            if USE_NEW_MODEL:
+                pred_positions, pred_features, importance_scores, selected_indices = model(
+                    highpoly, target_vertex_count=target_vertex_count
+                )
+                # Filtrar edge_index para usar apenas vértices selecionados
+                n_original = highpoly.edge_index.max().item() + 1 if highpoly.edge_index.numel() > 0 else 0
+                if n_original > 0:
+                    mapping = torch.full((n_original,), -1, dtype=torch.long, device=highpoly.edge_index.device)
+                    mapping[selected_indices] = torch.arange(len(selected_indices), device=highpoly.edge_index.device)
+                    
+                    mask = (mapping[highpoly.edge_index[0]] >= 0) & (mapping[highpoly.edge_index[1]] >= 0)
+                    filtered_edges = highpoly.edge_index[:, mask]
+                    
+                    if filtered_edges.numel() > 0:
+                        filtered_edges[0] = mapping[filtered_edges[0]]
+                        filtered_edges[1] = mapping[filtered_edges[1]]
+                        pred_edge_index = filtered_edges
+                    else:
+                        pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
+                else:
+                    pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
+            else:
+                pred_positions, pred_features = model(highpoly)
+                pred_edge_index = highpoly.edge_index
             
             # Calcular loss
             target_positions = lowpoly.pos
             target_features = lowpoly.x[:, 3:9] if lowpoly.x.shape[1] >= 9 else None
             
-            loss, loss_dict = criterion(
-                pred_positions, pred_features,
-                target_positions, target_features
-            )
+            # Preparar argumentos da loss (compatível com versão antiga e nova)
+            loss_args = {
+                "pred_positions": pred_positions,
+                "pred_features": pred_features,
+                "target_positions": target_positions,
+                "target_features": target_features
+            }
+            
+            # Adicionar argumentos extras se usar nova loss
+            if USE_NEW_LOSS:
+                loss_args.update({
+                    "pred_edge_index": pred_edge_index,
+                    "target_edge_index": lowpoly.edge_index,
+                    "target_vertex_count": target_vertex_count
+                })
+            
+            loss, loss_dict = criterion(**loss_args)
             
             # Acumular estatísticas
             total_loss += loss.item()
@@ -173,9 +285,10 @@ def validate(model, val_loader, criterion, device):
                 loss_details[key] += loss_dict.get(key, 0.0)
             num_batches += 1
             
+            pos_loss_key = 'chamfer_loss' if 'chamfer_loss' in loss_dict else 'pos_loss'
             pbar.set_postfix({
                 "loss": f"{loss.item():.4f}",
-                "pos": f"{loss_dict['pos_loss']:.4f}"
+                "pos": f"{loss_dict.get(pos_loss_key, 0):.4f}"
             })
     
     # Médias
@@ -186,7 +299,47 @@ def validate(model, val_loader, criterion, device):
     return avg_loss, loss_details
 
 
-def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir, is_best=False):
+def load_checkpoint(checkpoint_path, model, optimizer=None, scheduler=None, device="cpu"):
+    """
+    Carrega um checkpoint do modelo.
+    
+    Args:
+        checkpoint_path: Caminho para o checkpoint
+        model: Modelo a ser carregado
+        optimizer: Otimizador (opcional)
+        scheduler: Scheduler (opcional)
+        device: Dispositivo
+        
+    Returns:
+        epoch: Época do checkpoint
+        best_val_loss: Melhor loss de validação (se disponível)
+        history: Histórico de treinamento (se disponível)
+    """
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    
+    # Carregar estado do modelo
+    model.load_state_dict(checkpoint["model_state_dict"])
+    
+    # Carregar estado do otimizador
+    if optimizer is not None and "optimizer_state_dict" in checkpoint:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    
+    # Carregar estado do scheduler (se disponível)
+    if scheduler is not None and "scheduler_state_dict" in checkpoint:
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+    
+    epoch = checkpoint.get("epoch", 0)
+    best_val_loss = checkpoint.get("best_val_loss", float('inf'))
+    history = checkpoint.get("history", {"train_loss": [], "val_loss": [], "epochs": []})
+    
+    print(f"✓ Checkpoint carregado: época {epoch}")
+    if best_val_loss != float('inf'):
+        print(f"✓ Melhor loss de validação: {best_val_loss:.6f}")
+    
+    return epoch, best_val_loss, history
+
+
+def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir, is_best=False, scheduler=None, best_val_loss=None, history=None):
     """
     Salva um checkpoint do modelo.
     """
@@ -198,6 +351,16 @@ def save_checkpoint(model, optimizer, epoch, loss, checkpoint_dir, is_best=False
         "model_config": MODEL_CONFIG,
         "training_config": TRAINING_CONFIG
     }
+    
+    # Adicionar scheduler se disponível
+    if scheduler is not None:
+        checkpoint["scheduler_state_dict"] = scheduler.state_dict()
+    
+    # Adicionar melhor loss e histórico
+    if best_val_loss is not None:
+        checkpoint["best_val_loss"] = best_val_loss
+    if history is not None:
+        checkpoint["history"] = history
     
     # Salvar checkpoint regular
     checkpoint_path = checkpoint_dir / f"checkpoint_epoch_{epoch}.pt"
@@ -220,6 +383,15 @@ def main():
     """
     Função principal de treinamento.
     """
+    parser = argparse.ArgumentParser(description="Treinar modelo GNN para retopologia")
+    parser.add_argument(
+        "--resume", "-r",
+        type=str,
+        default=None,
+        help="Caminho para checkpoint para continuar treinamento (ex: checkpoints/checkpoint_epoch_50.pt ou checkpoints/last_checkpoint.pt)"
+    )
+    args = parser.parse_args()
+    
     print("=" * 70)
     print("Treinamento do Modelo GNN para Retopologia")
     print("=" * 70)
@@ -251,12 +423,25 @@ def main():
     
     # Criar modelo
     print("Inicializando modelo...")
-    model = RetopologyGNN(MODEL_CONFIG).to(device)
+    if USE_NEW_MODEL:
+        model = RetopologyGNN(MODEL_CONFIG, target_vertex_count=None).to(device)
+        print("✓ Usando modelo estável (StableRetopologyGNN)")
+    else:
+        model = RetopologyGNN(MODEL_CONFIG).to(device)
+        print("✓ Usando modelo original (compatibilidade)")
+    
     print(f"✓ Modelo criado com {sum(p.numel() for p in model.parameters())} parâmetros")
     print()
     
     # Loss e otimizador
-    criterion = RetopologyLoss()
+    if USE_NEW_LOSS:
+        from loss_v2 import ImprovedRetopologyLoss
+        criterion = ImprovedRetopologyLoss()
+        print("✓ Usando loss melhorada (ImprovedRetopologyLoss)")
+    else:
+        criterion = RetopologyLoss()
+        print("✓ Usando loss original (compatibilidade)")
+    print()
     optimizer = optim.Adam(model.parameters(), lr=TRAINING_CONFIG["learning_rate"])
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
     
@@ -268,13 +453,45 @@ def main():
     }
     
     best_val_loss = float('inf')
+    start_epoch = 1
     start_time = time.time()
+    
+    # Carregar checkpoint se especificado
+    if args.resume:
+        checkpoint_path = Path(args.resume)
+        if not checkpoint_path.exists():
+            print(f"❌ Erro: Checkpoint não encontrado: {checkpoint_path}")
+            return
+        
+        print(f"Carregando checkpoint de {checkpoint_path}...")
+        start_epoch, best_val_loss, loaded_history = load_checkpoint(
+            checkpoint_path, model, optimizer, scheduler, device
+        )
+        
+        # Usar histórico carregado se disponível
+        if loaded_history and loaded_history.get("train_loss"):
+            history = loaded_history
+            print(f"✓ Histórico carregado: {len(history['train_loss'])} épocas anteriores")
+        else:
+            # Tentar carregar histórico do arquivo JSON
+            history_path = CHECKPOINTS_DIR / "training_history.json"
+            if history_path.exists():
+                try:
+                    with open(history_path, 'r') as f:
+                        history = json.load(f)
+                    print(f"✓ Histórico carregado do arquivo JSON: {len(history.get('train_loss', []))} épocas")
+                except Exception as e:
+                    print(f"⚠️  Aviso: Não foi possível carregar histórico: {e}")
+        
+        start_epoch += 1  # Começar da próxima época
+        print(f"✓ Continuando treinamento da época {start_epoch}")
+        print()
     
     # Loop de treinamento
     print("Iniciando treinamento...")
     print("=" * 70)
     
-    for epoch in range(1, TRAINING_CONFIG["num_epochs"] + 1):
+    for epoch in range(start_epoch, TRAINING_CONFIG["num_epochs"] + 1):
         print(f"\nÉpoca {epoch}/{TRAINING_CONFIG['num_epochs']}")
         print("-" * 70)
         
@@ -283,8 +500,20 @@ def main():
         history["train_loss"].append(train_loss)
         
         print(f"Loss de treino: {train_loss:.6f}")
-        print(f"  - Posição: {train_details['pos_loss']:.6f}")
-        print(f"  - Features: {train_details['feature_loss']:.6f}")
+        print(f"  - Chamfer: {train_details.get('chamfer_loss', train_details.get('pos_loss', 0)):.6f}")
+        if 'hausdorff_loss' in train_details:
+            print(f"  - Hausdorff: {train_details['hausdorff_loss']:.6f}")
+        if 'edge_length_loss' in train_details:
+            print(f"  - Edge Length: {train_details['edge_length_loss']:.6f}")
+        if 'degenerate_loss' in train_details:
+            print(f"  - Degenerate: {train_details['degenerate_loss']:.6f}")
+        if 'smoothness_loss' in train_details:
+            print(f"  - Smoothness: {train_details['smoothness_loss']:.6f}")
+        if 'vertex_count_loss' in train_details:
+            print(f"  - Vertex Count: {train_details['vertex_count_loss']:.6f}")
+        print(f"  - Features: {train_details.get('feature_loss', 0):.6f}")
+        if 'normal_consistency_loss' in train_details:
+            print(f"  - Normal Consistency: {train_details['normal_consistency_loss']:.6f}")
         
         # Validar
         if epoch % TRAINING_CONFIG["val_every"] == 0:
@@ -293,8 +522,20 @@ def main():
             history["epochs"].append(epoch)
             
             print(f"Loss de validação: {val_loss:.6f}")
-            print(f"  - Posição: {val_details['pos_loss']:.6f}")
-            print(f"  - Features: {val_details['feature_loss']:.6f}")
+            print(f"  - Chamfer: {val_details.get('chamfer_loss', val_details.get('pos_loss', 0)):.6f}")
+            if 'hausdorff_loss' in val_details:
+                print(f"  - Hausdorff: {val_details['hausdorff_loss']:.6f}")
+            if 'edge_length_loss' in val_details:
+                print(f"  - Edge Length: {val_details['edge_length_loss']:.6f}")
+            if 'degenerate_loss' in val_details:
+                print(f"  - Degenerate: {val_details['degenerate_loss']:.6f}")
+            if 'smoothness_loss' in val_details:
+                print(f"  - Smoothness: {val_details['smoothness_loss']:.6f}")
+            if 'vertex_count_loss' in val_details:
+                print(f"  - Vertex Count: {val_details['vertex_count_loss']:.6f}")
+            print(f"  - Features: {val_details.get('feature_loss', 0):.6f}")
+            if 'normal_consistency_loss' in val_details:
+                print(f"  - Normal Consistency: {val_details['normal_consistency_loss']:.6f}")
             
             # Atualizar learning rate
             scheduler.step(val_loss)
@@ -309,7 +550,10 @@ def main():
         
         # Salvar checkpoint
         if epoch % TRAINING_CONFIG["save_every"] == 0:
-            save_checkpoint(model, optimizer, epoch, train_loss, CHECKPOINTS_DIR, is_best=False)
+            save_checkpoint(
+                model, optimizer, epoch, train_loss, CHECKPOINTS_DIR,
+                is_best=False, scheduler=scheduler, best_val_loss=best_val_loss, history=history
+            )
             print(f"✓ Checkpoint salvo (época {epoch})")
         
         # Salvar histórico
@@ -318,7 +562,10 @@ def main():
             json.dump(history, f, indent=2)
     
     # Salvar checkpoint final
-    save_checkpoint(model, optimizer, TRAINING_CONFIG["num_epochs"], train_loss, CHECKPOINTS_DIR, is_best=False)
+    save_checkpoint(
+        model, optimizer, TRAINING_CONFIG["num_epochs"], train_loss, CHECKPOINTS_DIR,
+        is_best=False, scheduler=scheduler, best_val_loss=best_val_loss, history=history
+    )
     
     elapsed_time = time.time() - start_time
     print()
