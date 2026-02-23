@@ -8,38 +8,22 @@ import trimesh
 from pathlib import Path
 import argparse
 
-from config import MODEL_CONFIG, CHECKPOINTS_DIR, OUTPUT_DIR, ORGANIZED_PAIRS_DIR, TARGET_VERTICES
+from config import MODEL_CONFIG, CHECKPOINTS_DIR, OUTPUT_DIR, ORGANIZED_PAIRS_DIR
 
 from model import RetopologyGNN
 from dataset import RetopologyDataset
-
-# Modelo retopo (K vértices fixos) — import opcional
-try:
-    from model_retopo import RetopologyGNN2000
-    _HAS_RETOPO_MODEL = True
-except ImportError:
-    RetopologyGNN2000 = None
-    _HAS_RETOPO_MODEL = False
 
 
 def load_model(checkpoint_path, device="cpu"):
     """
     Carrega o modelo a partir de um checkpoint.
-    Se o checkpoint for do modelo retopo (target_vertices), usa RetopologyGNN2000.
-    
     Returns:
-        model, checkpoint, is_retopo (bool)
+        model, checkpoint
     """
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
     model_config = checkpoint.get("model_config", MODEL_CONFIG)
-    target_vertices = checkpoint.get("target_vertices", None)
-    is_retopo = target_vertices is not None and _HAS_RETOPO_MODEL
-
-    if is_retopo:
-        model = RetopologyGNN2000(model_config, target_vertices=int(target_vertices))
-    else:
-        model = RetopologyGNN(model_config)
+    model = RetopologyGNN(model_config)
     
     # Carregar state_dict com tratamento de chaves faltantes (compatibilidade com checkpoints antigos)
     state_dict = checkpoint["model_state_dict"]
@@ -88,7 +72,7 @@ def load_model(checkpoint_path, device="cpu"):
     
     model.to(device)
     model.eval()
-    return model, checkpoint, is_retopo
+    return model, checkpoint
 
 
 def mesh_to_graph(mesh, config=None):
@@ -162,17 +146,14 @@ def predict_lowpoly(highpoly_path, checkpoint_path=None, output_path=None, targe
     print("=" * 70)
     print()
     
-    is_retopo = False
     # Carregar modelo (se não foi fornecido)
     if model is None:
         if checkpoint_path is None:
             raise ValueError("checkpoint_path é obrigatório se model não for fornecido")
         print(f"Carregando modelo de {checkpoint_path}...")
-        model, checkpoint, is_retopo = load_model(checkpoint_path, device)
-        print(f"✓ Modelo carregado (época {checkpoint.get('epoch', '?')})" + (" [retopo K vértices]" if is_retopo else ""))
+        model, checkpoint = load_model(checkpoint_path, device)
+        print(f"✓ Modelo carregado (época {checkpoint.get('epoch', '?')})")
         print()
-    else:
-        is_retopo = getattr(model, "target_vertices", None) is not None
     
     # Carregar high poly mesh
     print(f"Carregando high poly mesh de {highpoly_path}...")
@@ -198,32 +179,16 @@ def predict_lowpoly(highpoly_path, checkpoint_path=None, output_path=None, targe
     # Fazer predição
     print("Gerando low poly...")
     highpoly_batch = highpoly_graph.to(device)
-    k = target_vertices or (getattr(model, "target_vertices", None) or TARGET_VERTICES)
-    k = min(k, highpoly_graph.x.shape[0])
-
     with torch.no_grad():
-        if is_retopo:
-            pred_positions, pred_features, _, _, pred_edge_index = model(
-                highpoly_batch, use_topk=True, target_vertices=k
-            )
-        else:
-            pred_positions, pred_features = model(highpoly_batch)
+        pred_positions, pred_features = model(highpoly_batch)
 
     # Criar grafo do low poly
-    from torch_geometric.data import Data
-    if is_retopo and pred_edge_index is not None:
-        lowpoly_graph = Data(
-            pos=pred_positions.cpu(),
-            x=torch.cat([pred_positions.cpu(), pred_features.cpu()], dim=1),
-            edge_index=pred_edge_index.cpu() if pred_edge_index.device.type != "cpu" else pred_edge_index,
-        )
-    else:
-        lowpoly_graph = highpoly_graph.clone()
-        lowpoly_graph.pos = pred_positions.cpu()
-        lowpoly_graph.x = torch.cat([pred_positions.cpu(), pred_features.cpu()], dim=1)
+    lowpoly_graph = highpoly_graph.clone()
+    lowpoly_graph.pos = pred_positions.cpu()
+    lowpoly_graph.x = torch.cat([pred_positions.cpu(), pred_features.cpu()], dim=1)
 
-    # Reduzir número de vértices (só modelo original)
-    if not is_retopo and target_vertices and len(lowpoly_graph.pos) > target_vertices:
+    # Reduzir número de vértices se pedido
+    if target_vertices and len(lowpoly_graph.pos) > target_vertices:
         print(f"Reduzindo para {target_vertices} vértices...")
         importance = torch.norm(lowpoly_graph.pos, dim=1)
         _, indices = torch.topk(importance, target_vertices)
@@ -295,11 +260,10 @@ def process_all_highpoly(checkpoint_path, output_dir=None, target_vertices=None,
     
     # Carregar modelo uma vez
     print(f"Carregando modelo de {checkpoint_path}...")
-    model, checkpoint, is_retopo = load_model(checkpoint_path, device)
-    print(f"✓ Modelo carregado (época {checkpoint.get('epoch', '?')})" + (" [retopo]" if is_retopo else ""))
+    model, checkpoint = load_model(checkpoint_path, device)
+    print(f"✓ Modelo carregado (época {checkpoint.get('epoch', '?')})")
     print()
 
-    target_k = target_vertices or getattr(model, "target_vertices", None) or TARGET_VERTICES
     # Processar cada arquivo
     successful = 0
     failed = 0
@@ -318,33 +282,18 @@ def process_all_highpoly(checkpoint_path, output_dir=None, target_vertices=None,
 
             highpoly_graph = mesh_to_graph(highpoly_mesh)
             highpoly_batch = highpoly_graph.to(device)
-            k = min(target_k, highpoly_graph.x.shape[0])
 
             with torch.no_grad():
-                if is_retopo:
-                    pred_positions, pred_features, _, _, pred_edge_index = model(
-                        highpoly_batch, use_topk=True, target_vertices=k
-                    )
-                else:
-                    pred_positions, pred_features = model(highpoly_batch)
-                    pred_edge_index = None
+                pred_positions, pred_features = model(highpoly_batch)
 
-            from torch_geometric.data import Data
-            if is_retopo and pred_edge_index is not None:
-                lowpoly_graph = Data(
-                    pos=pred_positions.cpu(),
-                    x=torch.cat([pred_positions.cpu(), pred_features.cpu()], dim=1),
-                    edge_index=pred_edge_index.cpu() if pred_edge_index.device.type != "cpu" else pred_edge_index,
-                )
-            else:
-                lowpoly_graph = highpoly_graph.clone()
-                lowpoly_graph.pos = pred_positions.cpu()
-                lowpoly_graph.x = torch.cat([pred_positions.cpu(), pred_features.cpu()], dim=1)
-                if target_vertices and len(lowpoly_graph.pos) > target_vertices:
-                    importance = torch.norm(lowpoly_graph.pos, dim=1)
-                    _, indices = torch.topk(importance, target_vertices)
-                    lowpoly_graph.pos = lowpoly_graph.pos[indices]
-                    lowpoly_graph.x = lowpoly_graph.x[indices]
+            lowpoly_graph = highpoly_graph.clone()
+            lowpoly_graph.pos = pred_positions.cpu()
+            lowpoly_graph.x = torch.cat([pred_positions.cpu(), pred_features.cpu()], dim=1)
+            if target_vertices and len(lowpoly_graph.pos) > target_vertices:
+                importance = torch.norm(lowpoly_graph.pos, dim=1)
+                _, indices = torch.topk(importance, target_vertices)
+                lowpoly_graph.pos = lowpoly_graph.pos[indices]
+                lowpoly_graph.x = lowpoly_graph.x[indices]
 
             # Salvar resultado
             output_path.parent.mkdir(parents=True, exist_ok=True)

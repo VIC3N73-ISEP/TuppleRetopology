@@ -29,7 +29,7 @@ class _OldRetopologyLoss(nn.Module):
     Combina múltiplas métricas: posição, normal, preservação de forma.
     """
     
-    def __init__(self, pos_weight=1.0, normal_weight=1.0, shape_weight=1.0):
+    def __init__(self, pos_weight=1.0, normal_weight=0.3, shape_weight=0.3):
         super(_OldRetopologyLoss, self).__init__()
         self.pos_weight = pos_weight
         self.normal_weight = normal_weight
