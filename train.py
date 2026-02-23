@@ -19,33 +19,18 @@ from config import (
     CHECKPOINTS_DIR, ORGANIZED_PAIRS_DIR
 )
 
-# Importar modelo: tentar novo, fallback para antigo
-try:
-    from model_v2 import StableRetopologyGNN as RetopologyGNN
-    USE_NEW_MODEL = True
-except ImportError:
-    from model import RetopologyGNN
-    USE_NEW_MODEL = False
-
-# Importar loss: tentar novo, fallback para antigo
-try:
-    from loss_v2 import ImprovedRetopologyLoss as RetopologyLoss
-    USE_NEW_LOSS = True
-except ImportError:
-    from train import RetopologyLoss
-    USE_NEW_LOSS = False
-
 from dataset import get_data_loaders
 
 
-class RetopologyLoss(nn.Module):
+# Definir loss antiga primeiro (para fallback)
+class _OldRetopologyLoss(nn.Module):
     """
     Loss function customizada para retopologia.
     Combina múltiplas métricas: posição, normal, preservação de forma.
     """
     
-    def __init__(self, pos_weight=1.0, normal_weight=0.5, shape_weight=0.3):
-        super(RetopologyLoss, self).__init__()
+    def __init__(self, pos_weight=1.0, normal_weight=1.0, shape_weight=1.0):
+        super(_OldRetopologyLoss, self).__init__()
         self.pos_weight = pos_weight
         self.normal_weight = normal_weight
         self.shape_weight = shape_weight
@@ -53,7 +38,7 @@ class RetopologyLoss(nn.Module):
         self.mse_loss = nn.MSELoss()
         self.l1_loss = nn.L1Loss()
     
-    def forward(self, pred_positions, pred_features, target_positions, target_features=None):
+    def forward(self, pred_positions, pred_features, target_positions, target_features=None, **kwargs):
         """
         Calcula a loss combinada.
         
@@ -62,6 +47,7 @@ class RetopologyLoss(nn.Module):
             pred_features: Features preditas (N, 6)
             target_positions: Posições alvo (M, 3)
             target_features: Features alvo (M, 6) - opcional
+            **kwargs: Argumentos extras ignorados (para compatibilidade com loss v2/v3)
         """
         # Loss de posição (usar chamfer distance aproximada)
         pos_loss = self._chamfer_distance(pred_positions, target_positions)
@@ -105,6 +91,11 @@ class RetopologyLoss(nn.Module):
         return chamfer
 
 
+# Modelo e loss originais
+from model import RetopologyGNN
+RetopologyLoss = _OldRetopologyLoss
+
+
 def train_epoch(model, train_loader, criterion, optimizer, device):
     """
     Treina o modelo por uma época.
@@ -127,60 +118,15 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         
         # Forward pass
         optimizer.zero_grad()
+        pred_positions, pred_features = model(highpoly)
         
-        # Obter target vertex count do lowpoly
-        target_vertex_count = lowpoly.pos.shape[0]
-        
-        # Forward pass (compatível com modelo antigo e novo)
-        if USE_NEW_MODEL:
-            pred_positions, pred_features, importance_scores, selected_indices = model(
-                highpoly, target_vertex_count=target_vertex_count
-            )
-            # Filtrar edge_index para usar apenas vértices selecionados
-            # Criar mapeamento: índice original → novo índice
-            n_original = highpoly.edge_index.max().item() + 1 if highpoly.edge_index.numel() > 0 else 0
-            if n_original > 0:
-                mapping = torch.full((n_original,), -1, dtype=torch.long, device=highpoly.edge_index.device)
-                mapping[selected_indices] = torch.arange(len(selected_indices), device=highpoly.edge_index.device)
-                
-                # Filtrar arestas onde ambos os vértices estão selecionados
-                mask = (mapping[highpoly.edge_index[0]] >= 0) & (mapping[highpoly.edge_index[1]] >= 0)
-                filtered_edges = highpoly.edge_index[:, mask]
-                
-                # Remapear índices
-                if filtered_edges.numel() > 0:
-                    filtered_edges[0] = mapping[filtered_edges[0]]
-                    filtered_edges[1] = mapping[filtered_edges[1]]
-                    pred_edge_index = filtered_edges
-                else:
-                    pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
-            else:
-                pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
-        else:
-            pred_positions, pred_features = model(highpoly)
-            pred_edge_index = highpoly.edge_index
-        
-        # Calcular loss (usar posições e features do lowpoly alvo)
+        # Calcular loss
         target_positions = lowpoly.pos
         target_features = lowpoly.x[:, 3:9] if lowpoly.x.shape[1] >= 9 else None
-        
-        # Preparar argumentos da loss (compatível com versão antiga e nova)
-        loss_args = {
-            "pred_positions": pred_positions,
-            "pred_features": pred_features,
-            "target_positions": target_positions,
-            "target_features": target_features
-        }
-        
-        # Adicionar argumentos extras se usar nova loss
-        if USE_NEW_LOSS:
-            loss_args.update({
-                "pred_edge_index": pred_edge_index,
-                "target_edge_index": lowpoly.edge_index,
-                "target_vertex_count": target_vertex_count
-            })
-        
-        loss, loss_dict = criterion(**loss_args)
+        loss, loss_dict = criterion(
+            pred_positions, pred_features,
+            target_positions, target_features
+        )
         
         # Backward pass
         loss.backward()
@@ -194,10 +140,9 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         num_batches += 1
         
         # Atualizar progress bar
-        pos_loss_key = 'chamfer_loss' if 'chamfer_loss' in loss_dict else 'pos_loss'
         pbar.set_postfix({
             "loss": f"{loss.item():.4f}",
-            "pos": f"{loss_dict.get(pos_loss_key, 0):.4f}"
+            "pos": f"{loss_dict.get('pos_loss', 0):.4f}"
         })
     
     # Médias
@@ -230,54 +175,15 @@ def validate(model, val_loader, criterion, device):
             lowpoly = batch["lowpoly"].to(device)
             
             # Forward pass
-            target_vertex_count = lowpoly.pos.shape[0]
-            
-            if USE_NEW_MODEL:
-                pred_positions, pred_features, importance_scores, selected_indices = model(
-                    highpoly, target_vertex_count=target_vertex_count
-                )
-                # Filtrar edge_index para usar apenas vértices selecionados
-                n_original = highpoly.edge_index.max().item() + 1 if highpoly.edge_index.numel() > 0 else 0
-                if n_original > 0:
-                    mapping = torch.full((n_original,), -1, dtype=torch.long, device=highpoly.edge_index.device)
-                    mapping[selected_indices] = torch.arange(len(selected_indices), device=highpoly.edge_index.device)
-                    
-                    mask = (mapping[highpoly.edge_index[0]] >= 0) & (mapping[highpoly.edge_index[1]] >= 0)
-                    filtered_edges = highpoly.edge_index[:, mask]
-                    
-                    if filtered_edges.numel() > 0:
-                        filtered_edges[0] = mapping[filtered_edges[0]]
-                        filtered_edges[1] = mapping[filtered_edges[1]]
-                        pred_edge_index = filtered_edges
-                    else:
-                        pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
-                else:
-                    pred_edge_index = torch.empty((2, 0), dtype=torch.long, device=highpoly.edge_index.device)
-            else:
-                pred_positions, pred_features = model(highpoly)
-                pred_edge_index = highpoly.edge_index
+            pred_positions, pred_features = model(highpoly)
             
             # Calcular loss
             target_positions = lowpoly.pos
             target_features = lowpoly.x[:, 3:9] if lowpoly.x.shape[1] >= 9 else None
-            
-            # Preparar argumentos da loss (compatível com versão antiga e nova)
-            loss_args = {
-                "pred_positions": pred_positions,
-                "pred_features": pred_features,
-                "target_positions": target_positions,
-                "target_features": target_features
-            }
-            
-            # Adicionar argumentos extras se usar nova loss
-            if USE_NEW_LOSS:
-                loss_args.update({
-                    "pred_edge_index": pred_edge_index,
-                    "target_edge_index": lowpoly.edge_index,
-                    "target_vertex_count": target_vertex_count
-                })
-            
-            loss, loss_dict = criterion(**loss_args)
+            loss, loss_dict = criterion(
+                pred_positions, pred_features,
+                target_positions, target_features
+            )
             
             # Acumular estatísticas
             total_loss += loss.item()
@@ -285,10 +191,9 @@ def validate(model, val_loader, criterion, device):
                 loss_details[key] += loss_dict.get(key, 0.0)
             num_batches += 1
             
-            pos_loss_key = 'chamfer_loss' if 'chamfer_loss' in loss_dict else 'pos_loss'
             pbar.set_postfix({
                 "loss": f"{loss.item():.4f}",
-                "pos": f"{loss_dict.get(pos_loss_key, 0):.4f}"
+                "pos": f"{loss_dict.get('pos_loss', 0):.4f}"
             })
     
     # Médias
@@ -423,25 +328,12 @@ def main():
     
     # Criar modelo
     print("Inicializando modelo...")
-    if USE_NEW_MODEL:
-        model = RetopologyGNN(MODEL_CONFIG, target_vertex_count=None).to(device)
-        print("✓ Usando modelo estável (StableRetopologyGNN)")
-    else:
-        model = RetopologyGNN(MODEL_CONFIG).to(device)
-        print("✓ Usando modelo original (compatibilidade)")
-    
+    model = RetopologyGNN(MODEL_CONFIG).to(device)
     print(f"✓ Modelo criado com {sum(p.numel() for p in model.parameters())} parâmetros")
     print()
     
     # Loss e otimizador
-    if USE_NEW_LOSS:
-        from loss_v2 import ImprovedRetopologyLoss
-        criterion = ImprovedRetopologyLoss()
-        print("✓ Usando loss melhorada (ImprovedRetopologyLoss)")
-    else:
-        criterion = RetopologyLoss()
-        print("✓ Usando loss original (compatibilidade)")
-    print()
+    criterion = RetopologyLoss()
     optimizer = optim.Adam(model.parameters(), lr=TRAINING_CONFIG["learning_rate"])
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
     
