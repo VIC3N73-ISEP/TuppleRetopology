@@ -17,7 +17,7 @@ def create_single_pair_dataset():
     
     # Diretórios
     source_dir = Path("Expai-Retopo")
-    output_dir = Path("trains_single_pair")
+    output_dir = Path("../trains_single_pair")
     output_dir.mkdir(exist_ok=True)
     
     # Arquivos do par 13

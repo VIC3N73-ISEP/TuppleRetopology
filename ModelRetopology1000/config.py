@@ -8,7 +8,7 @@ from pathlib import Path
 # Diretórios
 PROJECT_ROOT = Path(__file__).parent
 DATA_DIR = PROJECT_ROOT / "Expai-Retopo"
-ORGANIZED_PAIRS_DIR = PROJECT_ROOT / "trains_single_pair"
+ORGANIZED_PAIRS_DIR = PROJECT_ROOT / "../trains_single_pair"
 CHECKPOINTS_DIR = PROJECT_ROOT / "checkpoints"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 
@@ -17,8 +17,8 @@ CHECKPOINTS_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Configurações de treinamento (modo rápido para modelo normal)
-TRAIN_PAIRS = 1900  # treino rápido
-VAL_PAIRS = 100     # validação rápida
+TRAIN_PAIRS = 3800  # treino rápido
+VAL_PAIRS = 200     # validação rápida
 
 # Configurações do modelo GNN (CONFIGURAÇÃO PESADA E COMPLEXA)
 MODEL_CONFIG = {
@@ -33,7 +33,7 @@ MODEL_CONFIG = {
 TRAINING_CONFIG = {
     "batch_size": 30,         # maior batch para acelerar iterações
     "learning_rate": 0.0001,   # valor estável para treino curto
-    "num_epochs": 200,        # treino rápido
+    "num_epochs": 500,        # treino rápido
     "save_every": 10,         # salvar mais frequente no treino curto
     "val_every": 5,          # validação frequente para acompanhar convergência
     "device": "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu",
