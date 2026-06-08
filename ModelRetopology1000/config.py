@@ -16,26 +16,29 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 CHECKPOINTS_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Configurações de treinamento (modo rápido para modelo normal)
-TRAIN_PAIRS = 3800  # treino rápido
-VAL_PAIRS = 200     # validação rápida
+# Configurações de treinamento (modo avançado: mais dados, mais épocas)
+TRAIN_PAIRS = 4000   # usar mais pares para treino
+VAL_PAIRS = 400      # mais validação para estimativa estável
 
-# Configurações do modelo GNN (CONFIGURAÇÃO PESADA E COMPLEXA)
+# Configurações do modelo GNN (modo avançado: rede mais profunda e larga)
 MODEL_CONFIG = {
-    "node_features": 9,      # Features por vértice (posição, normal, etc.)
-    "hidden_dim": 256,       # Dimensão oculta (aumentado para modelo mais complexo e poderoso)
-    "num_layers": 8,         # Número de camadas GNN (mais profundidade = mais capacidade de aprendizado)
-    "dropout": 0.2,          # Dropout rate (aumentado para evitar overfitting em modelo grande)
-    "use_batch_norm": True,  # Usar batch normalization
+    "node_features": 9,       # Features por vértice (posição, normal, etc.)
+    "hidden_dim": 384,        # Dimensão oculta maior (mais capacidade)
+    "num_layers": 10,         # Mais camadas GNN (mais profundidade)
+    "dropout": 0.25,         # Dropout um pouco maior para regularização
+    "use_batch_norm": True,  # Batch normalization
 }
 
-# Configurações de treinamento (modo rápido para train.py)
+# Configurações de treinamento (modo avançado: mais épocas, weight decay, grad clip)
 TRAINING_CONFIG = {
-    "batch_size": 30,         # maior batch para acelerar iterações
-    "learning_rate": 0.0001,   # valor estável para treino curto
-    "num_epochs": 500,        # treino rápido
-    "save_every": 10,         # salvar mais frequente no treino curto
-    "val_every": 5,          # validação frequente para acompanhar convergência
+    "batch_size": 24,              # batch menor se GPU tiver pouca memória com modelo maior
+    "learning_rate": 5e-5,         # LR mais baixo para treino longo estável
+    "weight_decay": 1e-5,          # L2 regularization
+    "num_epochs": 1000,             # treino longo
+    "save_every": 5,                # checkpoints mais frequentes
+    "val_every": 2,                 # validação frequente
+    "grad_clip_max_norm": 1.0,      # clip de gradientes (estabilidade)
+    "early_stopping_patience": 80,  # parar se val_loss não melhorar em N épocas (0 = desativado)
     "device": "cuda" if os.environ.get("CUDA_VISIBLE_DEVICES") else "cpu",
 }
 

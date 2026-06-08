@@ -323,10 +323,11 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Gerar low poly mesh a partir de high poly")
     parser.add_argument(
-        "--input", "-i",
+        "--input", "-i", "--highpoly",
         type=str,
         default=None,
-        help="Caminho para o arquivo OBJ high poly (opcional se usar --all)"
+        dest="input",
+        help="Caminho para o arquivo OBJ high poly (opcional se usar --all). --highpoly é alias de --input."
     )
     parser.add_argument(
         "--all", "-a",

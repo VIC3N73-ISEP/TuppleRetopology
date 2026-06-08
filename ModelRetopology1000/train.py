@@ -29,12 +29,12 @@ class _OldRetopologyLoss(nn.Module):
     Combina múltiplas métricas: posição, normal, preservação de forma.
     """
     
-    def __init__(self, pos_weight=1.0, normal_weight=0.3, shape_weight=0.3):
+    def __init__(self, pos_weight=2.0, normal_weight=0.2, shape_weight=0.2):
         super(_OldRetopologyLoss, self).__init__()
         self.pos_weight = pos_weight
         self.normal_weight = normal_weight
         self.shape_weight = shape_weight
-        
+         
         self.mse_loss = nn.MSELoss()
         self.l1_loss = nn.L1Loss()
     
@@ -96,7 +96,7 @@ from model import RetopologyGNN
 RetopologyLoss = _OldRetopologyLoss
 
 
-def train_epoch(model, train_loader, criterion, optimizer, device):
+def train_epoch(model, train_loader, criterion, optimizer, device, grad_clip_max_norm=1.0):
     """
     Treina o modelo por uma época.
     """
@@ -130,7 +130,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         
         # Backward pass
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_max_norm)
         optimizer.step()
         
         # Acumular estatísticas
@@ -334,7 +334,11 @@ def main():
     
     # Loss e otimizador
     criterion = RetopologyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=TRAINING_CONFIG["learning_rate"])
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=TRAINING_CONFIG["learning_rate"],
+        weight_decay=TRAINING_CONFIG.get("weight_decay", 0),
+    )
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
     
     # Histórico de treinamento
@@ -347,6 +351,9 @@ def main():
     best_val_loss = float('inf')
     start_epoch = 1
     start_time = time.time()
+    epochs_without_improvement = 0
+    early_stopping_patience = TRAINING_CONFIG.get("early_stopping_patience", 0)
+    grad_clip = TRAINING_CONFIG.get("grad_clip_max_norm", 1.0)
     
     # Carregar checkpoint se especificado
     if args.resume:
@@ -388,7 +395,9 @@ def main():
         print("-" * 70)
         
         # Treinar
-        train_loss, train_details = train_epoch(model, train_loader, criterion, optimizer, device)
+        train_loss, train_details = train_epoch(
+            model, train_loader, criterion, optimizer, device, grad_clip_max_norm=grad_clip
+        )
         history["train_loss"].append(train_loss)
         
         print(f"Loss de treino: {train_loss:.6f}")
@@ -436,7 +445,17 @@ def main():
             is_best = val_loss < best_val_loss
             if is_best:
                 best_val_loss = val_loss
+                epochs_without_improvement = 0
                 print(f"✓ Novo melhor modelo! (loss: {best_val_loss:.6f})")
+                save_checkpoint(
+                    model, optimizer, epoch, train_loss, CHECKPOINTS_DIR,
+                    is_best=True, scheduler=scheduler, best_val_loss=best_val_loss, history=history
+                )
+            else:
+                epochs_without_improvement += 1
+            if early_stopping_patience > 0 and epochs_without_improvement >= early_stopping_patience:
+                print(f"\n⏹ Early stopping: sem melhoria em {early_stopping_patience} validações. A parar.")
+                break
         else:
             val_loss = None
         

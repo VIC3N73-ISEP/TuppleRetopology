@@ -25,7 +25,7 @@ from model import RetopologyGNN2000
 class RetopologyLoss(nn.Module):
     """Chamfer para posições + MSE para features (normais)."""
 
-    def __init__(self, pos_weight=1.0, normal_weight=0.3):
+    def __init__(self, pos_weight=2, normal_weight=0.1):
         super().__init__()
         self.pos_weight = pos_weight
         self.normal_weight = normal_weight
@@ -51,7 +51,7 @@ class RetopologyLoss(nn.Module):
         return torch.mean(d.min(dim=1)[0]) + torch.mean(d.min(dim=0)[0])
 
 
-def train_epoch(model, train_loader, criterion, optimizer, device):
+def train_epoch(model, train_loader, criterion, optimizer, device, grad_clip_max_norm=1.0):
     model.train()
     total_loss = 0.0
     loss_details = {"pos_loss": 0.0, "feature_loss": 0.0, "total_loss": 0.0}
@@ -68,7 +68,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
             target_positions, target_features,
         )
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_max_norm)
         optimizer.step()
         total_loss += loss.item()
         for k in loss_details:
@@ -163,12 +163,19 @@ def main():
     )
     model = RetopologyGNN2000(MODEL_CONFIG).to(device)
     criterion = RetopologyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=TRAINING_CONFIG["learning_rate"])
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=TRAINING_CONFIG["learning_rate"],
+        weight_decay=TRAINING_CONFIG.get("weight_decay", 0),
+    )
     scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=10)
     history = {"train_loss": [], "val_loss": [], "epochs": []}
     best_val_loss = float("inf")
     start_epoch = 1
     start_time = time.time()
+    epochs_without_improvement = 0
+    early_stopping_patience = TRAINING_CONFIG.get("early_stopping_patience", 0)
+    grad_clip = TRAINING_CONFIG.get("grad_clip_max_norm", 1.0)
 
     if args.resume:
         rpath = Path(args.resume)
@@ -181,7 +188,9 @@ def main():
 
     for epoch in range(start_epoch, TRAINING_CONFIG["num_epochs"] + 1):
         print(f"\nÉpoca {epoch}/{TRAINING_CONFIG['num_epochs']}")
-        train_loss, train_details = train_epoch(model, train_loader, criterion, optimizer, device)
+        train_loss, train_details = train_epoch(
+            model, train_loader, criterion, optimizer, device, grad_clip_max_norm=grad_clip
+        )
         history["train_loss"].append(train_loss)
         print(f"Train loss: {train_loss:.6f} (pos: {train_details['pos_loss']:.6f}, feat: {train_details['feature_loss']:.6f})")
 
@@ -194,10 +203,16 @@ def main():
             is_best = val_loss < best_val_loss
             if is_best:
                 best_val_loss = val_loss
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
             save_checkpoint(
                 model, optimizer, epoch, train_loss, CHECKPOINTS_DIR,
                 is_best=is_best, scheduler=scheduler, best_val_loss=best_val_loss, history=history,
             )
+            if early_stopping_patience > 0 and epochs_without_improvement >= early_stopping_patience:
+                print(f"\n⏹ Early stopping: sem melhoria em {early_stopping_patience} validações. A parar.")
+                break
         else:
             if epoch % TRAINING_CONFIG["save_every"] == 0:
                 save_checkpoint(
