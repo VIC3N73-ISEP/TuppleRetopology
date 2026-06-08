@@ -1,0 +1,95 @@
+# =============================================================================
+# Data & datasets (large mesh pairs, generated training data)
+# =============================================================================
+Expai-Retopo/
+training_data/
+train_mass_pair/
+trains_single_pair/
+resultado_heatmap/
+
+# =============================================================================
+# Model artifacts (checkpoints, inference output)
+# =============================================================================
+**/checkpoints/
+**/checkpointsOneObjectTraining/
+**/output/
+*.pth
+*.pt
+*.ckpt
+
+# =============================================================================
+# Mesh & 3D assets
+# =============================================================================
+*.obj
+*.blend
+*.blend1
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checkers
+.mypy_cache/
+.ruff_cache/
+
+# =============================================================================
+# IDE & editors
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# OS
+# =============================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =============================================================================
+# Environment & secrets
+# =============================================================================
+.env
+.env.*
+!.env.example
